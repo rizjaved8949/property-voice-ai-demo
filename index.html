@@ -873,7 +873,7 @@
     .call-log-table {
       width: 100%;
       border-collapse: collapse;
-      min-width: 820px;
+      min-width: 980px;
     }
 
     .call-log-table th,
@@ -935,6 +935,131 @@
     }
 
     .direction-pill.unknown {
+      color: var(--muted);
+    }
+
+    .summary-action-button {
+      min-height: 34px;
+      min-width: 112px;
+      padding: 0 12px;
+      border-radius: 10px;
+      border: 1px solid rgba(99, 230, 190, .2);
+      background: rgba(99, 230, 190, .08);
+      color: #dffcef;
+      font: inherit;
+      font-size: .78rem;
+      font-weight: 820;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      transition: background .2s ease, border-color .2s ease, transform .2s ease;
+    }
+
+    .summary-action-button:hover {
+      background: rgba(99, 230, 190, .14);
+      border-color: rgba(99, 230, 190, .36);
+      transform: translateY(-1px);
+    }
+
+    .summary-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 30;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 20px;
+    }
+
+    .summary-modal.open {
+      display: flex;
+    }
+
+    .summary-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(2, 8, 16, .72);
+      backdrop-filter: blur(10px);
+    }
+
+    .summary-dialog {
+      position: relative;
+      width: min(720px, 100%);
+      max-height: min(82vh, 720px);
+      overflow: hidden;
+      border: 1px solid var(--stroke-bright);
+      border-radius: 24px;
+      background: linear-gradient(145deg, rgba(13, 30, 50, .98), rgba(7, 18, 32, .98));
+      box-shadow: 0 35px 90px rgba(0, 0, 0, .46);
+    }
+
+    .summary-header {
+      padding: 22px 24px 18px;
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, .08);
+    }
+
+    .summary-header h2 {
+      font-size: 1.45rem;
+    }
+
+    .summary-meta {
+      margin-top: 9px;
+      color: var(--muted);
+      font-size: .82rem;
+      line-height: 1.55;
+    }
+
+    .summary-close {
+      width: 40px;
+      height: 40px;
+      flex: 0 0 auto;
+      border-radius: 12px;
+      border: 1px solid var(--stroke);
+      background: rgba(255, 255, 255, .045);
+      color: #e7f0fb;
+      font-size: 1.35rem;
+      line-height: 1;
+      cursor: pointer;
+      transition: background .2s ease, border-color .2s ease;
+    }
+
+    .summary-close:hover {
+      background: rgba(255, 255, 255, .075);
+      border-color: var(--stroke-bright);
+    }
+
+    .summary-body {
+      padding: 22px 24px 24px;
+      max-height: calc(min(82vh, 720px) - 118px);
+      overflow-y: auto;
+      color: #dbe7f5;
+      font-size: .94rem;
+      line-height: 1.75;
+      white-space: normal;
+    }
+
+    .summary-body p {
+      margin: 0 0 14px;
+    }
+
+    .summary-body p:last-child {
+      margin-bottom: 0;
+    }
+
+    .summary-body pre {
+      margin: 0;
+      white-space: pre-wrap;
+      word-break: break-word;
+      font: inherit;
+    }
+
+    .no-summary {
       color: var(--muted);
     }
 
@@ -1246,11 +1371,12 @@
                 <th>Duration</th>
                 <th>Time</th>
                 <th>Status</th>
+                <th>Call Summary</th>
               </tr>
             </thead>
             <tbody id="callLogsBody">
               <tr>
-                <td colspan="6" class="muted-cell">No call logs loaded yet.</td>
+                <td colspan="7" class="muted-cell">No call logs loaded yet.</td>
               </tr>
             </tbody>
           </table>
@@ -1273,6 +1399,23 @@
   </main>
 
   <div class="toast" id="toast" role="status"></div>
+
+  <div class="summary-modal" id="summaryModal" aria-hidden="true">
+    <div class="summary-backdrop" id="summaryBackdrop"></div>
+    <div class="summary-dialog" role="dialog" aria-modal="true" aria-labelledby="summaryTitle">
+      <div class="summary-header">
+        <div>
+          <div class="panel-kicker">Call Summary</div>
+          <h2 id="summaryTitle">Call summary</h2>
+          <div class="summary-meta" id="summaryMeta"></div>
+        </div>
+        <button class="summary-close" id="closeSummaryModal" type="button" aria-label="Close call summary">×</button>
+      </div>
+      <div class="summary-body" id="summaryBody">
+        <p class="no-summary">Select a call summary from the call logs.</p>
+      </div>
+    </div>
+  </div>
 
   <script>
     /*
@@ -1300,6 +1443,7 @@
     let currentCallLogsPage = 1;
     let callLogsTotal = 0;
     let callLogsHasMore = false;
+    let currentCallLogs = [];
 
     /*
       ============================================================
@@ -1553,6 +1697,13 @@
     const prevLogsPage = document.getElementById("prevLogsPage");
     const nextLogsPage = document.getElementById("nextLogsPage");
 
+    const summaryModal = document.getElementById("summaryModal");
+    const summaryBackdrop = document.getElementById("summaryBackdrop");
+    const closeSummaryModal = document.getElementById("closeSummaryModal");
+    const summaryTitle = document.getElementById("summaryTitle");
+    const summaryMeta = document.getElementById("summaryMeta");
+    const summaryBody = document.getElementById("summaryBody");
+
     function initializeProperties() {
       propertySelect.innerHTML = properties.map(p =>
         `<option value="${p.id}">${p.name} · ${p.price}</option>`
@@ -1713,6 +1864,76 @@
       });
     }
 
+    function getFirstAvailableValue(values) {
+      return values.find(value => {
+        if (value === null || value === undefined) return false;
+        if (typeof value === "string") return value.trim().length > 0;
+        if (Array.isArray(value)) return value.length > 0;
+        if (typeof value === "object") return Object.keys(value).length > 0;
+        return Boolean(value);
+      });
+    }
+
+    function getCallSummary(call) {
+      return getFirstAvailableValue([
+        call.call_summary,
+        call.summary,
+        call.call_analysis?.call_summary,
+        call.call_analysis?.summary,
+        call.call_analysis?.custom_analysis_data?.call_summary,
+        call.call_analysis?.custom_analysis_data?.summary,
+        call.post_call_analysis?.call_summary,
+        call.post_call_analysis?.summary,
+        call.analysis?.call_summary,
+        call.analysis?.summary
+      ]);
+    }
+
+    function formatSummaryContent(summary) {
+      if (!summary) {
+        return `
+          <p class="no-summary">
+            No call summary was returned for this call yet. Make sure your n8n webhook sends
+            <strong>call_analysis.call_summary</strong> or <strong>call_summary</strong> inside each item.
+          </p>
+        `;
+      }
+
+      if (Array.isArray(summary)) {
+        return summary.map(item => `<p>${escapeHtml(item)}</p>`).join("");
+      }
+
+      if (typeof summary === "object") {
+        return `<pre>${escapeHtml(JSON.stringify(summary, null, 2))}</pre>`;
+      }
+
+      return String(summary)
+        .split(/\n{2,}|\r?\n/)
+        .filter(paragraph => paragraph.trim().length > 0)
+        .map(paragraph => `<p>${escapeHtml(paragraph.trim())}</p>`)
+        .join("");
+    }
+
+    function openCallSummary(call) {
+      const direction = getCallDirection(call);
+      const callId = call.call_id || call.id || "-";
+      const fromNumber = call.from_number || "-";
+      const toNumber = call.to_number || "-";
+      const summary = getCallSummary(call);
+
+      summaryTitle.textContent = `${direction === "unknown" ? "Call" : direction} call summary`;
+      summaryMeta.textContent = `Call ID: ${callId} · From: ${fromNumber} · To: ${toNumber} · Duration: ${formatDuration(call)} · Time: ${formatCallTime(call.start_timestamp)}`;
+      summaryBody.innerHTML = formatSummaryContent(summary);
+      summaryModal.classList.add("open");
+      summaryModal.setAttribute("aria-hidden", "false");
+      closeSummaryModal.focus();
+    }
+
+    function hideCallSummary() {
+      summaryModal.classList.remove("open");
+      summaryModal.setAttribute("aria-hidden", "true");
+    }
+
     function updatePaginationControls(itemsCount) {
       const startRecord = callLogsTotal === 0
         ? 0
@@ -1736,10 +1957,12 @@
     }
 
     function renderCallLogs(calls) {
+      currentCallLogs = Array.isArray(calls) ? calls : [];
+
       if (!Array.isArray(calls) || calls.length === 0) {
         callLogsBody.innerHTML = `
           <tr>
-            <td colspan="6" class="muted-cell">No call logs found.</td>
+            <td colspan="7" class="muted-cell">No call logs found.</td>
           </tr>
         `;
 
@@ -1748,8 +1971,9 @@
         return;
       }
 
-      callLogsBody.innerHTML = calls.map(call => {
+      callLogsBody.innerHTML = calls.map((call, index) => {
         const direction = getCallDirection(call);
+        const hasSummary = Boolean(getCallSummary(call));
 
         return `
           <tr>
@@ -1763,6 +1987,11 @@
             <td>${escapeHtml(formatDuration(call))}</td>
             <td>${escapeHtml(formatCallTime(call.start_timestamp))}</td>
             <td>${escapeHtml(call.call_status || call.status || "-")}</td>
+            <td>
+              <button class="summary-action-button" type="button" data-summary-index="${index}">
+                ${hasSummary ? "View summary" : "No summary"}
+              </button>
+            </td>
           </tr>
         `;
       }).join("");
@@ -1835,7 +2064,7 @@
       } catch (error) {
         callLogsBody.innerHTML = `
           <tr>
-            <td colspan="6" class="muted-cell">Unable to load call logs.</td>
+            <td colspan="7" class="muted-cell">Unable to load call logs.</td>
           </tr>
         `;
 
@@ -1959,6 +2188,27 @@
     nextLogsPage.addEventListener("click", () => {
       if (callLogsHasMore) {
         loadCallLogs(currentCallLogsPage + 1);
+      }
+    });
+
+    callLogsBody.addEventListener("click", (event) => {
+      const summaryButton = event.target.closest("[data-summary-index]");
+      if (!summaryButton) return;
+
+      const callIndex = Number(summaryButton.dataset.summaryIndex);
+      const call = currentCallLogs[callIndex];
+
+      if (call) {
+        openCallSummary(call);
+      }
+    });
+
+    closeSummaryModal.addEventListener("click", hideCallSummary);
+    summaryBackdrop.addEventListener("click", hideCallSummary);
+
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && summaryModal.classList.contains("open")) {
+        hideCallSummary();
       }
     });
 
